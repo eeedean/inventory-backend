@@ -79,7 +79,7 @@
 
         packages.dockerImage = dockerImage;
 
-        checks.system = pkgs.testers.runNixOSTest {
+        checks.gradletests = pkgs.testers.runNixOSTest {
           name = "Gradle Test: Inventory Backend Stub";
 
           nodes = {
