@@ -26,11 +26,19 @@
             chmod +x $out/bin/*
           '';
         };
+        applicationSource = pkgs.stdenv.mkDerivation {
+          name = "inventory-backend-src";
+          src = self;
+          version = version;
+          installPhase = ''
+            mkdir -p $out
+            cp -r ./* $out/
+          '';
+        };
         application = pkgs.stdenv.mkDerivation {
           # disabling sandbox
           __noChroot = true;
           name = "inventory-backend";
-          src = self;
           version = version;
           buildInputs = [ pkgs.openjdk17 ];
 
@@ -71,8 +79,28 @@
 
         packages.dockerImage = dockerImage;
 
-        defaultPackage = self.packages.default;
+        checks.system = pkgs.testers.runNixOSTest {
+          name = "Gradle Test: Inventory Backend Stub";
 
+          nodes = {
+            machine1 = { pkgs, ... }: {
+              environment.systemPackages = [pkgs.openjdk17 applicationSource];
+              nix.settings.sandbox = false;
+              virtualisation.docker.enable = true;
+
+              virtualisation.memorySize = 2 * 1024;
+              virtualisation.msize = 128 * 1024;
+              virtualisation.cores = 2;
+           };
+         };
+
+         testScript = ''
+           machine1.wait_for_unit("network-online.target")
+           machine1.execute("cp -r ${applicationSource}/* ${applicationSource}/.* .")
+           machine1.execute("java -version")
+           machine1.succeed("./gradlew test --no-daemon --debug");
+         '';
+       };
       }
     );
 }
