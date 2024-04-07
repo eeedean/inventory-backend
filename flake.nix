@@ -4,9 +4,10 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    gradle-dot-nix.url = "github:CrazyChaoz/gradle-dot-nix";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
+  outputs = { self, nixpkgs, flake-utils, gradle-dot-nix, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -26,15 +27,18 @@
             chmod +x $out/bin/*
           '';
         };
-        applicationSource = pkgs.stdenv.mkDerivation {
-          name = "inventory-backend-src";
-          src = self;
-          version = version;
-          installPhase = ''
-            mkdir -p $out
-            cp -r ./* $out/
-          '';
-        };
+	gradle-init-script = (import gradle-dot-nix {
+                                               inherit pkgs;
+                                               gradle-verification-metadata-file = ./gradle/verification-metadata.xml;
+                                               unprotected-maven-repos = ''
+                                                  [
+                                                    "https://repo.maven.apache.org/maven2",
+                                                    "https://plugins.gradle.org/m2",
+                                                    "https://maven.google.com",
+                                                    "https://repo.spring.io/milestone",
+                                                  ]
+                                               '';
+                                             }).gradle-init;
         application = pkgs.stdenv.mkDerivation {
           # disabling sandbox
           __noChroot = true;
@@ -45,7 +49,7 @@
           buildPhase = ''
             export GRADLE_USER_HOME=$(mktemp -d)
             chmod +x ./gradlew
-            ./gradlew clean build --info
+            ./gradlew clean build --info -I ${gradle-init-script} --offline --full-stacktrace
           '';
 
           installPhase = ''
@@ -76,6 +80,7 @@
         };
 
         packages.default = application;
+	packages.application = application;
 
         packages.dockerImage = dockerImage;
 
@@ -84,7 +89,7 @@
 
           nodes = {
             machine1 = { pkgs, ... }: {
-              environment.systemPackages = [pkgs.openjdk17 applicationSource];
+              environment.systemPackages = [pkgs.openjdk17];
               nix.settings.sandbox = false;
               virtualisation.docker.enable = true;
 
@@ -96,7 +101,7 @@
 
          testScript = ''
            machine1.wait_for_unit("network-online.target")
-           machine1.execute("cp -r ${applicationSource}/* ${applicationSource}/.* .")
+           machine1.succeed("cp -r ${self}/* .")
            machine1.execute("java -version")
            machine1.succeed("./gradlew test --no-daemon --debug");
          '';

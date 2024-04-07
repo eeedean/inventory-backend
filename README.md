@@ -47,4 +47,5 @@ In order to build the docker image, I'm running `nix build -vvv .#packages.aarch
 
 ## Current problem(s):
 ### Impurity
-I just cannot get any pure solution to work. I just can't 🫠.
+
+I was trying to set up `gradle-dot-nix`, however, it fails as to be seen in `error.log`. 
