@@ -46,6 +46,4 @@ linux-builder = {
 In order to build the docker image, I'm running `nix build -vvv .#packages.aarch64-linux.dockerImage --print-out-paths`, because I want to create a docker image to be run on aarch64-linux docker.
 
 ## Current problem(s):
-### Impurity
-
-I was trying to set up `gradle-dot-nix`, however, it fails as to be seen in `error.log`. 
+`nix flake check -v -L` fails as to be seen in `error.log`. 

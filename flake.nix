@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    gradle-dot-nix.url = "github:CrazyChaoz/gradle-dot-nix";
+    gradle-dot-nix.url = "github:eeedean/gradle-dot-nix";
   };
 
   outputs = { self, nixpkgs, flake-utils, gradle-dot-nix, ... }:
@@ -12,6 +12,13 @@
       let
         pkgs = import nixpkgs {
           inherit system;
+          overlays = [
+            (self: super: {
+              gradle_8 = super.gradle_8.override {
+                java = self.openjdk17;
+              };
+            })
+          ];
         };
         version = "0.0.1-SNAPSHOT";
         inventory-jre = pkgs.stdenv.mkDerivation {
@@ -35,21 +42,19 @@
                                                     "https://repo.maven.apache.org/maven2",
                                                     "https://plugins.gradle.org/m2",
                                                     "https://maven.google.com",
-                                                    "https://repo.spring.io/milestone",
+                                                    "https://repo.spring.io/milestone"
                                                   ]
                                                '';
                                              }).gradle-init;
         application = pkgs.stdenv.mkDerivation {
-          # disabling sandbox
-          __noChroot = true;
           name = "inventory-backend";
           version = version;
-          buildInputs = [ pkgs.openjdk17 ];
+	  src = self;
+          buildInputs = [ pkgs.openjdk17 pkgs.gradle_8 ];
 
           buildPhase = ''
             export GRADLE_USER_HOME=$(mktemp -d)
-            chmod +x ./gradlew
-            ./gradlew clean build --info -I ${gradle-init-script} --offline --full-stacktrace
+            gradle clean build --info -I ${gradle-init-script} --offline --full-stacktrace -x test
           '';
 
           installPhase = ''
@@ -89,7 +94,7 @@
 
           nodes = {
             machine1 = { pkgs, ... }: {
-              environment.systemPackages = [pkgs.openjdk17];
+              environment.systemPackages = [pkgs.openjdk17 pkgs.gradle_8];
               nix.settings.sandbox = false;
               virtualisation.docker.enable = true;
 
@@ -102,8 +107,7 @@
          testScript = ''
            machine1.wait_for_unit("network-online.target")
            machine1.succeed("cp -r ${self}/* .")
-           machine1.execute("java -version")
-           machine1.succeed("./gradlew test --no-daemon --debug");
+           machine1.succeed("gradle test --no-daemon --debug");
          '';
        };
       }
