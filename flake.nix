@@ -2,9 +2,9 @@
   description = "Inventory Backend Flake";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/b69de56fac8c2b6f8fd27f2eca01dcda8e0a4221";
     flake-utils.url = "github:numtide/flake-utils";
-    gradle-dot-nix.url = "github:eeedean/gradle-dot-nix";
+    gradle-dot-nix.url = "github:CrazyChaoz/gradle-dot-nix/873b7cdb43be8921c6fa91efd73a874e5c0325ed";
   };
 
   outputs = { self, nixpkgs, flake-utils, gradle-dot-nix, ... }:
@@ -13,9 +13,12 @@
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
-            (self: super: {
-              gradle_8 = super.gradle_8.override {
-                java = self.openjdk17;
+            (self: super: let 
+              jdk = self.jdk21_headless; 
+            in {
+              inherit jdk;
+              gradle = super.gradle_8.override {
+                java = jdk;
               };
             })
           ];
@@ -23,7 +26,7 @@
         version = "0.0.1-SNAPSHOT";
         inventory-jre = pkgs.stdenv.mkDerivation {
           name = "inventory-jre";
-          buildInputs = [ pkgs.openjdk17 ];
+          buildInputs = [ pkgs.jdk ];
           src = self;
           buildPhase = ''
             jlink --add-modules java.base,java.xml --output custom-jre
@@ -37,11 +40,10 @@
 	gradle-init-script = (import gradle-dot-nix {
                                                inherit pkgs;
                                                gradle-verification-metadata-file = ./gradle/verification-metadata.xml;
-                                               unprotected-maven-repos = ''
+                                               public-maven-repos = ''
                                                   [
                                                     "https://repo.maven.apache.org/maven2",
                                                     "https://plugins.gradle.org/m2",
-                                                    "https://maven.google.com",
                                                     "https://repo.spring.io/milestone"
                                                   ]
                                                '';
@@ -50,7 +52,7 @@
           name = "inventory-backend";
           version = version;
 	  src = self;
-          buildInputs = [ pkgs.openjdk17 pkgs.gradle_8 ];
+          buildInputs = [ pkgs.jdk pkgs.gradle ];
 
           buildPhase = ''
             export GRADLE_USER_HOME=$(mktemp -d)
@@ -81,7 +83,7 @@
         };
       in {
         devShells.default = pkgs.mkShell {
-          buildInputs = [ pkgs.openjdk17 ];
+          buildInputs = [ pkgs.jdk ];
         };
 
         packages.default = application;
@@ -94,20 +96,21 @@
 
           nodes = {
             machine1 = { pkgs, ... }: {
-              environment.systemPackages = [pkgs.openjdk17 pkgs.gradle_8];
+              environment.systemPackages = [pkgs.jdk pkgs.gradle];
               nix.settings.sandbox = false;
               virtualisation.docker.enable = true;
 
               virtualisation.memorySize = 2 * 1024;
               virtualisation.msize = 128 * 1024;
               virtualisation.cores = 2;
+	      virtualisation.diskSize = 2 * 1024;
            };
          };
 
          testScript = ''
            machine1.wait_for_unit("network-online.target")
            machine1.succeed("cp -r ${self}/* .")
-           machine1.succeed("gradle test --no-daemon --debug");
+           machine1.succeed("./gradlew test -I ${gradle-init-script} --no-daemon --info --full-stacktrace");
          '';
        };
       }
